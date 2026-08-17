@@ -12,19 +12,19 @@ By default the AppImage, its icon and its desktop entry are moved into predefine
 
 * Depedencies
 - fzf
-- xargs
 - file
-- tree
 - gtk-update-icon-cache
 
-* Installation
+* Installation & Running
 + Since fzam installs AppImages on the =~/Applications= folder on the user's home directory, it makes sense that fzam is installed on =~/.local/bin= and exists for the local user only. That means that =make install= should not be run with sudo priviledges.
   #+begin_example
-  git clone https://github.com/sat3llite/fzam
+  git clone https://github.com/sat3llite/fzam # Or download latest source code archive from Releases
   cd fzam
   make install
   #+end_example
-
+  After that you can launch fzam from the terminal if =~/.local/bin= is included in =$PATH=.\\
+  FZAM can be launched in debug / verbose mode with -d.
+  
 + =make uninstall= will uninstall fzam from the user's system.
 
 * Frequently Asked Questions
