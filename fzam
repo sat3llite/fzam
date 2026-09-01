@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 
 # FZAM - Fuzzy AppImage Manager | Manage AppImages on Linux.
-# Depedencies: fzf, file, gtk-update-icon-cache
+# Dependencies: fzf, file, gtk-update-icon-cache
 # GitHub: https://github.com/sat3llite/fzam
 # LICENSE: GNU General Public License v3.
 
@@ -40,101 +40,139 @@ APPIMAGEICONDIR="$HOME/.local/share/icons/hicolor"
 # The default value ~/.local/share/applications is the usual location for user-installed desktop entries.
 APPIMAGEDESKTOPDIR="$HOME/.local/share/applications" 
 
-# When set to 1 the script starts in verbose / debug mode, outputting useful information about the AppImage and its contents.
-verbose=0
+# When set to true the script starts in verbose / debug mode, outputting useful information about the AppImage and its contents.
+verbose=false
 
 ## Functions ##
 
 # Install / Integrate AppImages.
 amintegrate() {
-    selection="$(find "$HOME" \( -path "${APPIMAGEDIR}" -o -path ~/.local/share/Trash -o -path ~/.cache \) -prune -o -type f -iname "*.AppImage" -print | "${FMENU[@]}" "Please type the location of the AppImage: ")"
-    if [ -n "$selection" ]; then
+    appimageexists=false
+    selection="$(find "$HOME" \( -path "${APPIMAGEDIR}" -o -path ~/.local/share/Trash -o -path ~/.cache \) -prune -o -type f -iname "*.AppImage" -print | "${FMENU[@]}" "Please type the location of the AppImage: " || true )"
+    if [[ -n "$selection" ]]; then
         for appimage in $selection
         do
-            # Check if selection is in the AppImage format
-            amformat=$(file "${appimage}" | awk -F ',' '{print $1}' | sed "s#${appimage}: ##")
-            case $amformat in
-                "ELF"*"LSB"*"executable")
-                        [[ "$verbose" -eq 1 ]] && echo "This file is an AppImage."
-                        ;;
-                *)
-                        echo "This file is not an AppImage."
-                        exit 1
-                        ;;
-            esac
-            chmod +x "$appimage"
-            # amname holds the name that the AppImage itself, its icon and desktop entry will have.
-            amname="$(basename "$appimage" | tr '[:upper:]' '[:lower:]' | awk -F '[_-]' '{print $1}' | sed 's#.AppImage##I')"
-            [[ "$verbose" -eq 1 ]] && echo "AppImage name is: ${amname}"
-            amlocation="${APPIMAGEDIR}/${amname}.AppImage"
-            mv -i "${appimage}" "${amlocation}"
+            if [[ -f "${appimage}" ]]; then
+                # Check if selection is in the AppImage format
+                amformat=$(file "${appimage}" | awk -F ',' '{print $1}' | sed "s#${appimage}: ##")
+                case $amformat in
+                    "ELF"*"LSB"*"executable")
+                            [[ "$verbose" = true ]] && echo "This file is an AppImage."
+                            ;;
+                    *)
+                            echo "This file is not an AppImage."
+                            exit 1
+                            ;;
+                esac
+                chmod +x "$appimage"
+                # amname holds the name that the AppImage itself, its icon and desktop entry will have.
+                amname="$(basename "$appimage" | tr '[:upper:]' '[:lower:]' | awk -F '[_-]' '{print $1}' | sed 's#.AppImage##I')"
+                [[ "$verbose" = true ]] && echo "AppImage name is: ${amname}"
+                amlocation="${APPIMAGEDIR}/${amname}.AppImage"
 
-            ${amlocation} --appimage-extract &> /dev/null || echo "This AppImage cannot be extracted."
+                # Check if AppImage exists. If yes offer the user the ability to update.
+                if [[ -f "$amlocation" ]]; then
+                    tput setaf 5 bold
+                    read -rp "AppImage ${appimage} exists on the system. Do you want to update it? [y/N] "
+                    tput sgr0
+                    if [[ $REPLY =~ ^[Yy] ]]; then
+                        [[ "$verbose" = true ]] && echo "Will update AppImage ${appimage}."
+                        mv -f "${appimage}" "${amlocation}"
+                        appimageexists=true
+                    else
+                        tput setaf 1 bold
+                        echo "Installation of ${appimage} canceled"
+                        tput sgr0
+                        return 1
+                    fi
+                else 
+                    mv "${appimage}" "${amlocation}"
+                fi
 
-            ## AppImage Icon
-            # Usually .DirIcon
-            # AppDir Specification: "PNG or SVG icon located in the root directory. Can be used by e.g., thumbnailers, to display application icons rather than a generic filetype symbol. Should be in one of the standard image sizes, e.g., 128x128 or 256x256 pixels."
-            if [[ -n "$(readlink -f squashfs-root/.DirIcon)" ]]; then
-                icon="$(readlink -f squashfs-root/.DirIcon)"
-                [[ "$verbose" -eq 1 ]] && echo "Found icon as $icon"
+                ${amlocation} --appimage-extract &> /dev/null || { echo "This AppImage cannot be extracted."; return 1; }
 
-                iconfmt="$(file "${icon}" | awk '{print $2}' | tr '[:upper:]' '[:lower:]')"
-                [[ "$verbose" -eq 1 ]] && echo "Icon format is: $iconfmt"
-            elif [[ -n $(find squashfs-root -maxdepth 1 -type f -iname "${amname}.*") ]]; then
-                icon="$(find squashfs-root -maxdepth 1 -type f -iname "${amname}.*")"
-                [[ "$verbose" -eq 1 ]] && echo "Found icon as $icon"
+                ## AppImage Icon
+                # Usually .DirIcon
+                # AppDir Specification: "PNG or SVG icon located in the root directory. Can be used by e.g., thumbnailers, to display application icons rather than a generic filetype symbol. Should be in one of the standard image sizes, e.g., 128x128 or 256x256 pixels."
+                if [[ -n "$(readlink -f squashfs-root/.DirIcon)" ]]; then
+                    icon="$(readlink -f squashfs-root/.DirIcon)"
+                    [[ "$verbose" = true ]] && echo "Found icon as $icon"
 
+                    iconfmt="$(file "${icon}" | awk '{print $2}' | tr '[:upper:]' '[:lower:]')"
+                    [[ "$verbose" = true ]] && echo "Icon format is: $iconfmt"
+                elif [[ -n $(find squashfs-root -maxdepth 1 -type f -iname "${amname}.*") ]]; then
+                    icon="$(find squashfs-root -maxdepth 1 -type f -iname "${amname}.*")"
+                    [[ "$verbose" = true ]] && echo "Found icon as $icon"
+                    iconfmt="$(file "${icon}" | awk '{print $2}' | tr '[:upper:]' '[:lower:]')"
+                    [[ "$verbose" = true ]] && echo "Icon format is: $iconfmt"
+                else
+                    echo "Could not find icon."
+                    icon="appimage"
+                    iconfmt=""
+                fi
 
-                iconfmt="$(file "${icon}" | awk '{print $2}' | tr '[:upper:]' '[:lower:]')"
-                [[ "$verbose" -eq 1 ]] && echo "Icon format is: $iconfmt"
+                # Move icon to XDG-compliant directory.
+                if [[ "$iconfmt" == "png" ]]; then
+                    iconsize="$(file "${icon}" | awk '{print $5}')"
+                    [[ ! -d "$APPIMAGEICONDIR/${iconsize}x${iconsize}/apps" ]] && mkdir -p "${APPIMAGEICONDIR}/${iconsize}x${iconsize}/apps"
+                    if [[ "$appimageexists" = true ]]; then
+                        cp -f "${icon}" "${APPIMAGEICONDIR}/${iconsize}x${iconsize}/apps/${amname}.${iconfmt}" || echo "Could not copy icon file."
+                    else
+                        cp "${icon}" "${APPIMAGEICONDIR}/${iconsize}x${iconsize}/apps/${amname}.${iconfmt}" || echo "Could not copy icon file."
+                    fi
+                    [[ "$verbose" = true ]] && echo "Copied icon file to ${APPIMAGEICONDIR}/${iconsize}x${iconsize}/apps"
+                elif [[ "$iconfmt" == "svg" ]]; then
+                    [[ ! -d "${APPIMAGEICONDIR}/scalable/apps" ]] && mkdir -p "${APPIMAGEICONDIR}/scalable/apps"
+                    if [[ "$appimageexists" = true ]]; then
+                        cp -f "${icon}" "${APPIMAGEICONDIR}/scalable/apps/${amname}.${iconfmt}" || echo "Could not copy icon file."
+                    else
+                        cp "${icon}" "${APPIMAGEICONDIR}/scalable/apps/${amname}.${iconfmt}" || echo "Could not copy icon file."
+                    fi
+                    [[ "$verbose" = true ]] && echo "Copied icon file to ${APPIMAGEICONDIR}/scalable/apps"
+                fi
+
+                # Update icon cache.
+                [[ ! -f "$APPIMAGEICONDIR/index.theme" ]] && [[ -f "/usr/share/icons/hicolor/index.theme" ]] && cp "/usr/share/icons/hicolor/index.theme" "$APPIMAGEICONDIR/index.theme"
+                command -v gtk-update-icon-cache > /dev/null && gtk-update-icon-cache -q -f "$APPIMAGEICONDIR"
+
+                ## AppImage .desktop file
+                ## AppDir specification: "A desktop file located in the root directory, describing the payload application."
+                finddesktop="$(find ./squashfs-root/ -maxdepth 1 -iname "*.desktop" -print0 | xargs -0 -I {} readlink -f {})"
+                for desktopfile in ${finddesktop}
+                do
+                    [[ "$verbose" = true ]] && echo "Found .desktop file as $desktopfile"
+
+                    # Sed substitutions make the desktop entry point to the installed AppImage and its icon.
+                    # They often fail and the desktop entry points to a binary which does not exist. In that case the user should edit the desktop entry via the fzam menu.
+                    sed -i "/Exec/s#${amname}#${amlocation}#I" "$desktopfile"
+                    sed -i "/Exec/s#AppRun#${amlocation}#I" "$desktopfile"
+                    sed -i "/Icon/s#=.*#=${amname}#I" "$desktopfile"
+                    [[ "$verbose" = true ]] && echo "All sed substitutions were done."
+
+                    if [[ "$appimageexists" = true ]]; then
+                        cp -f "${desktopfile}" "$APPIMAGEDESKTOPDIR" || echo "Could not copy .desktop file"
+                    else
+                        cp "${desktopfile}" "$APPIMAGEDESKTOPDIR" || echo "Could not copy .desktop file"
+                    fi
+                    [[ "$verbose" = true ]] && echo "Copied .desktop file to $APPIMAGEDESKTOPDIR"
+                done
+
+                # Delete leftover directories
+                [[ -d "./squashfs-root" ]] && rm -rf ./squashfs-root
+                [[ -d "./AppDir" ]] && rm -rf ./AppDir
+
+                tput setaf 2 bold
+                echo " ${appimage} was successfully integrated."
+                tput sgr0
             else
-                echo "Could not find icon."
-                icon="appimage"
-                iconfmt=""
+                tput setaf 1 bold
+                echo "AppImage: ${appimage} was not found."
+                tput sgr0
+                return 1
             fi
-
-            # Move icon to XDG-compliant directory.
-            if [[ "$iconfmt" == "png" ]]; then
-                iconsize="$(file "${icon}" | awk '{print $5}')"
-                [[ ! -d "$APPIMAGEICONDIR/${iconsize}x${iconsize}/apps" ]] && mkdir -p "${APPIMAGEICONDIR}/${iconsize}x${iconsize}/apps"
-                cp -i "${icon}" "${APPIMAGEICONDIR}/${iconsize}x${iconsize}/apps/${amname}.${iconfmt}" || echo "Could not copy icon file."
-                [[ "$verbose" -eq 1 ]] && echo "Copied icon file to ${APPIMAGEICONDIR}/${iconsize}x${iconsize}/apps"
-            elif [[ "$iconfmt" == "svg" ]]; then
-                [[ ! -d "${APPIMAGEICONDIR}/scalable/apps" ]] && mkdir -p "${APPIMAGEICONDIR}/scalable/apps"
-                cp -i "${icon}" "${APPIMAGEICONDIR}/scalable/apps/${amname}.${iconfmt}" || echo "Could not copy icon file."
-                [[ "$verbose" -eq 1 ]] && echo "Copied icon file to ${APPIMAGEICONDIR}/scalable/apps"
-            fi
-
-            # Update icon cache.
-            [[ ! -f "$APPIMAGEICONDIR/index.theme" ]] && [[ -f "/usr/share/icons/hicolor/index.theme" ]] && cp "/usr/share/icons/hicolor/index.theme" "$APPIMAGEICONDIR/index.theme"
-            command -v gtk-update-icon-cache > /dev/null && gtk-update-icon-cache -q -f "$APPIMAGEICONDIR"
-
-            ## AppImage .desktop file
-            ## AppDir specification: "A desktop file located in the root directory, describing the payload application."
-            finddesktop="$(find ./squashfs-root/ -maxdepth 1 -iname "*.desktop" -print0 | xargs -0 -I {} readlink -f {})"
-            for desktopfile in ${finddesktop}
-            do
-                [[ "$verbose" -eq 1 ]] && echo "Found .desktop file as $desktopfile"
-
-                # Sed substitutions make the desktop entry point to the installed AppImage and its icon.
-                # They often fail and the desktop entry points to an application which does not exist. In that case the user should edit the desktop entry via the fzam menu.
-                sed -i "/Exec/s#${amname}#${amlocation}#I" "$desktopfile"
-                sed -i "/Exec/s#AppRun#${amlocation}#I" "$desktopfile"
-                sed -i "/Icon/s#=.*#=${amname}#I" "$desktopfile"
-                [[ "$verbose" -eq 1 ]] && echo "All sed substitutions were done."
-
-                cp -i "${desktopfile}" "$APPIMAGEDESKTOPDIR" || echo "Could not copy .desktop file"
-                [[ "$verbose" -eq 1 ]] && echo "Copied .desktop file to $APPIMAGEDESKTOPDIR"
-            done
-
-            [[ -d "./squashfs-root" ]] && rm -rf ./squashfs-root
-            [[ -d "./AppDir" ]] && rm -rf ./AppDir
-
-            tput setaf 2 bold
-            echo " ${appimage} was successfully integrated."
-            tput sgr0
         done
     fi
+    return 0
 }
 
 ## Delete / Uninstall AppImage.
@@ -142,7 +180,7 @@ amintegrate() {
 amdelete() {
     selectiondel="" # The list of AppImages for deletion.
     if [[ -d "${APPIMAGEDIR}" ]] && [[ -d "${APPIMAGEICONDIR}" ]]; then
-        selectiondel="$(find "${APPIMAGEDIR}" -type f -iname "*.AppImage" -printf '%f\n' | sort | "${FMENU[@]}" "Choose an AppImage to remove: ")"
+        selectiondel="$(find "${APPIMAGEDIR}" -type f -iname "*.AppImage" -printf '%f\n' | sort | "${FMENU[@]}" "Choose an AppImage to remove: " || true)"
         if [[ -n "${selectiondel}" ]]; then
             for appimage in $selectiondel
             do
@@ -152,24 +190,24 @@ amdelete() {
                     read -rp "${appimage} will be uninstalled. Are you sure? [y/N] "
                     tput sgr0
                     if [[ $REPLY =~ ^[Yy] ]]; then
-                        [[ "$verbose" -eq 1 ]] && echo "AppImage to be deleted: ${appimage}"
+                        [[ "$verbose" = true ]] && echo "AppImage to be deleted: ${appimage}"
 
                         rm "${APPIMAGEDIR}/${appimage}" || echo "${appimage} was not found."
-                        [[ "$verbose" -eq 1 ]] && echo "Deleted AppImage: ${appimage}"
+                        [[ "$verbose" = true ]] && echo "Deleted AppImage: ${appimage}"
 
                         founddesktop="$(grep -r "${appimage}" "${APPIMAGEDESKTOPDIR}" | awk -F ':' '{print $1}')"
                         if [[ -n "$founddesktop" ]]; then
-                        [[ "$verbose" -eq 1 ]] && echo "Found .desktop files: $(paste -sd, - <<< "${founddesktop[@]}")"
+                        [[ "$verbose" = true ]] && echo "Found .desktop files: $(paste -sd, - <<< "${founddesktop[@]}")"
                         for desktopfile in ${founddesktop}
                         do
                             [[ -f $desktopfile && -n $desktopfile ]] && rm "$desktopfile"
-                            [[ "$verbose" -eq 1 ]] && echo "Deleted AppImage .desktop file"
-                        done;
+                            [[ "$verbose" = true ]] && echo "Deleted AppImage .desktop file"
+                        done
                         fi
                         foundicon="$(find "$APPIMAGEICONDIR" -type f -iname "${amname}*")"
                         if [[ -n "$foundicon" ]]; then
                             rm "${foundicon}"
-                            [[ "$verbose" -eq 1 ]] && echo "Deleted icon: ${foundicon}"
+                            [[ "$verbose" = true ]] && echo "Deleted icon: ${foundicon}"
                         else
                             echo "No icon was found."
                         fi
@@ -180,11 +218,13 @@ amdelete() {
                         tput setaf 1 bold
                         echo "Operation canceled"
                         tput sgr0
+                        return 1
                     fi
-                    else
+                else
                     tput setaf 1 bold
                     echo "AppImage: ${appimage} was not found."
                     tput sgr0
+                    return 1
                 fi
             done
         fi
@@ -192,14 +232,16 @@ amdelete() {
         tput setaf 1 bold
         echo " No AppImages were found."
         tput sgr0
+        return 1
     fi
 }
 
 # List installed AppImages in $APPIMAGEDIR.
 amlist() {
     if [[ -d "${APPIMAGEDIR}" ]] && compgen -G "${APPIMAGEDIR}/*.AppImage" &> /dev/null; then
-        echo "$(tput setaf 6 bold)󰏖 AppImages currently installed:$(tput sgr0)"
-        find "${APPIMAGEDIR}" -iname "*.AppImage" | sort | xargs -I {} basename {}
+        appimages="$(find "${APPIMAGEDIR}" -maxdepth 1 -type f -iname "*.AppImage" | sort | xargs -I {} basename {})"
+        echo "$(tput setaf 6 bold)󰏖 AppImages currently installed: ($(wc -l <<< "${appimages}")) $(tput sgr0)"
+        echo "- ${appimages//$'\n'/$'\n'- }"
     else
         echo "$(tput setaf 1 bold) No AppImages were found.$(tput sgr0)"
     fi
@@ -214,17 +256,17 @@ amedit() {
                 echo "To override this run fzam like this: \$ EDITOR=PROGRAM fzam"
                 touch ~/.cache/fzam-edit
         fi
-        choice="$(grep -r -m 1 "\.AppImage" "${APPIMAGEDESKTOPDIR}" | sort | awk -F ":" '{print $1}' | "${FMENU[@]}" "Choose an AppImage entry to edit: ")"
+        choice="$(grep -r -m 1 "\.AppImage" "${APPIMAGEDESKTOPDIR}" | sort | awk -F ":" '{print $1}' | "${FMENU[@]}" "Choose an AppImage entry to edit: " || true)"
         if [[ -n $choice ]]; then
                 "${EDITOR}" "${choice}"
         fi
 }
 
-# Check for installed programs.
+# Check for dependencies and variables.
 _checks() {
-    # Check if script is run as root. Running fzam with root priviledges pose a significant security threat and the AppImages are installed in root user's home directory, not regular user's.
+    # Check if the script is run as root. Running fzam with root privileges poses a significant security threat and changes the installation destination of the AppImages from the user's home directory to the root user's.
     if [ "$(id -u)" -eq 0 ]; then
-        echo "fzam should not be run with root priviledges. Please run it as a regular user and without sudo / doas / run0."
+        echo "fzam should not be run with root privileges. Please run it as a regular user and without sudo, doas or run0."
         exit 1
     fi
     if [ ! -d "$APPIMAGEDIR" ]; then
@@ -254,7 +296,7 @@ _checks() {
     fi
 }
 
-# When called this function outputs the Help Text.
+# Help text.
 _help() {
     cat <<EOF
 Description: Manage AppImages on Linux.
@@ -268,36 +310,38 @@ EOF
 
 # This function executes whether the script runs with the -d flag or not.
 _maincmd() {
-    options=(
-	"Install/Integrate an AppImage"
-	"Delete an AppImage"
-	"Edit an AppImage Desktop Entry"
-	"List Installed AppImages"
-	"Quit"
-    )
-    choice="$(printf '%s\n' "${options[@]}" | "${FMENU[@]}" "What would you like to do? ")"
-    case $choice in
-	"${options[0]}")
-		amintegrate
-		;;
-	"${options[1]}")
-		amdelete
-		;;
-	"${options[2]}")
-		amedit
-		;;
-	"${options[3]}")
-		amlist
-		;;
-	"${options[4]}")
-	        tput setaf 10 bold
-		echo "Bye Bye!" 
-		tput sgr0
-		exit 0
-		;;
-    esac
-    sleep 0.2
-    _maincmd
+    while true
+    do
+        options=(
+            "Install/Integrate an AppImage"
+            "Delete an AppImage"
+            "Edit an AppImage Desktop Entry"
+            "List Installed AppImages"
+            "Quit"
+        )
+        choice="$(printf '%s\n' "${options[@]}" | "${FMENU[@]}" "What would you like to do? ")"
+        case $choice in
+            "${options[0]}")
+                amintegrate
+                ;;
+            "${options[1]}")
+                amdelete
+                ;;
+            "${options[2]}")
+                amedit
+                ;;
+            "${options[3]}")
+                amlist
+                ;;
+            "${options[4]}")
+                tput setaf 10 bold
+                echo "Bye Bye!" 
+                tput sgr0
+                exit 0
+                ;;
+        esac
+        sleep 0.2
+    done
 }
 
 # Main Function.
@@ -319,7 +363,7 @@ main() {
 	    amlist
 	    ;;
 	-d | --debug)
-	    verbose=1
+	    verbose=true
 	    tput setaf 3 bold
 	    echo "FZAM | Fuzzy AppImage Manager v1.1"
 	    echo "Manage AppImages on Linux."
@@ -340,7 +384,7 @@ main() {
 
 FZAM | Fuzzy AppImage Manager v1.1
 Homepage: https://github.com/sat3llite/fzam
-Report Issues at: https://github.com/sat3llite/fzam
+Report Issues at: https://github.com/sat3llite/fzam/issues
 EOF
 	    tput sgr0
 	    ;;
