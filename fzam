@@ -73,7 +73,7 @@ amintegrate() {
                 # Check if AppImage exists. If yes offer the user the ability to update.
                 if [[ -f "$amlocation" ]]; then
                     tput setaf 5 bold
-                    read -rp "AppImage ${appimage} exists on the system. Do you want to update it? [y/N] "
+                    read -rp "AppImage ${appimage} already exists on the system. Do you want to update it? [y/N] "
                     tput sgr0
                     if [[ $REPLY =~ ^[Yy] ]]; then
                         [[ "$verbose" = true ]] && echo "Will update AppImage ${appimage}."
@@ -258,7 +258,7 @@ amedit() {
         fi
         choice="$(grep -r -m 1 "\.AppImage" "${APPIMAGEDESKTOPDIR}" | sort | awk -F ":" '{print $1}' | "${FMENU[@]}" "Choose an AppImage entry to edit: " || true)"
         if [[ -n $choice ]]; then
-                "${EDITOR}" "${choice}"
+                ${EDITOR} "${choice}"
         fi
 }
 
