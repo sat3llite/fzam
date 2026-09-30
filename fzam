@@ -26,7 +26,7 @@ FMENU=(
     --height=92% \
     --bind change:top \
     --bind enter:accept-or-print-query \
-    --footer="FZAM | Fuzzy AppImage Manager v1.1" \
+    --footer="FZAM | Fuzzy AppImage Manager v1.2" \
     --prompt
 )
 
@@ -351,7 +351,7 @@ main() {
     case "$_arg" in
 	"")
 	    tput setaf 3 bold
-	    echo "FZAM | Fuzzy AppImage Manager v1.1"
+	    echo "FZAM | Fuzzy AppImage Manager v1.2"
 	    echo "Manage AppImages on Linux."
 	    tput sgr0
 	    _maincmd
@@ -365,7 +365,7 @@ main() {
 	-d | --debug)
 	    verbose=true
 	    tput setaf 3 bold
-	    echo "FZAM | Fuzzy AppImage Manager v1.1"
+	    echo "FZAM | Fuzzy AppImage Manager v1.2"
 	    echo "Manage AppImages on Linux."
 	    tput sgr0
 	    tput setaf 13 bold
@@ -382,7 +382,7 @@ main() {
 |  _|  / /_ / ___ \| |  | |
 |_|   /____/_/   \_\_|  |_|
 
-FZAM | Fuzzy AppImage Manager v1.1
+FZAM | Fuzzy AppImage Manager v1.2
 Homepage: https://github.com/sat3llite/fzam
 Report Issues at: https://github.com/sat3llite/fzam/issues
 EOF
